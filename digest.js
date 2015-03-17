@@ -9,7 +9,7 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
     var authHeader = null
       , username = localStorageService.get('username')
       , password = localStorageService.get('password')
-      , HA1 = null
+      , HA1 = localStorageService.get('auth')
       ;
 
     var createHeader = function(method, url) {
@@ -36,7 +36,8 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
           opaque, 
           algorithm,
           cnonce,
-          nc;
+          nc,
+          stale;
       
       var reg = /.+?\:\/\/.+?(\/.+?)(?:#|\?|$)/,
           ws = '(?:(?:\\r\\n)?[ \\t])+',
@@ -68,6 +69,9 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
         }
         if (value.match('opaque')) {
           opaque = unq(value.split('=')[1]);
+        }
+        if (value.match('stale')) {
+          stale = unq(value.split('=')[1]);
         }
       });
 
@@ -140,6 +144,20 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
           if (!authHeader) {
             return $q.reject(rejection);
           }
+            
+          if (authHeader.match("expired=true")) {
+              localStorageService.remove('auth');
+              localStorageService.remove('username');
+              localStorageService.remove('password');
+              HA1 = null;
+              username = null;
+              password = null;
+          }
+          if (!username) {
+              username = localStorageService.get('username')
+              password = localStorageService.get('password')
+              HA1 = localStorageService.get('auth')
+          }
 
           var
             $http = $injector.get('$http');
@@ -163,11 +181,18 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
             })
             .success(function (data, status, headers, config) {
               password = null;
+              localStorageService.add('auth', HA1);
+              localStorageService.remove('password');
 
               deferredResponse.resolve({data: data, status: status, headers: headers, config: config});
             })
             .error(function () {
+              localStorageService.remove('auth');
+              localStorageService.remove('username');
+              localStorageService.remove('password');
               HA1 = null;
+              username = null;
+              password = null;
 
               deferredResponse.reject(rejection);
             });
@@ -184,4 +209,4 @@ angular.module('DigestAuthInterceptor', ['LocalStorageModule'])
 
     return digest;
   });
-});
+}); 
